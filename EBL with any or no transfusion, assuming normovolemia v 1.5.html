@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>EBL & MABL Calculator with PRBC Transfusion</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Style for the "Calculate EBL & MABL" button */
+        .calculate-btn {
+            font-weight: bold;
+            color: black;
+            background-color: green;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+        }
+    </style>
+    <script type="text/javascript">
+        var chart;
+
+        function calculateEBLAndMABL() {
+            // Get input values for calculating EBV
+            var gender = document.getElementById("gender").value;
+            var height = parseFloat(document.getElementById("height").value) / 100; // Convert cm to meters
+            var weight = parseFloat(document.getElementById("weight").value);
+            var ageCategory = document.getElementById("ageCategory").value;
+
+            // Get input values for calculating EBL & MABL
+            var hbi = parseFloat(document.getElementById("hbi").value);
+            var hbc = parseFloat(document.getElementById("hbc").value);
+            var hbr = parseFloat(document.getElementById("hbr").value) || 20;  // Default to 20 if blank
+            var vprbc = parseFloat(document.getElementById("vprbc").value) || 0;  // Default to 0 if blank
+            var hbt = parseFloat(document.getElementById("hbt").value) || 8; // Default to 8 if blank
+
+            // Validate inputs
+            if (isNaN(height) || isNaN(weight) || height <= 0 || weight <= 0 || isNaN(hbi) || isNaN(hbc) || hbi <= 0 || hbc < 0 || hbr <= 0 || vprbc < 0 || hbt <= 0) {
+                alert("Please enter valid positive numbers.");
+                return;
+            }
+
+            // Step 1: Calculate Estimated Blood Volume (EBV) based on age category
+            var ebv;
+            var avgBloodVolume;
+            if (ageCategory === "adult") {
+                avgBloodVolume = (gender === "male") ? 75 : 65; // 75 for adult male, 65 for adult female
+            } else if (ageCategory === "infant") {
+                avgBloodVolume = 80;
+            } else if (ageCategory === "neonate") {
+                avgBloodVolume = 85;
+            } else if (ageCategory === "preterm") {
+                avgBloodVolume = 96;
+            }
+            ebv = weight * avgBloodVolume; // Calculate EBV in mL
+
+            // Step 2: Calculate Expected Hemoglobin after transfusion without blood loss (Hbe)
+            var hbe = ((hbi * ebv) + (hbr * vprbc)) / ebv;
+
+            // Step 3: Estimate Blood Loss (EBL)
+            var ebl;
+            if (hbc < hbe) {
+                ebl = ((hbe - hbc) * ebv) / hbc;
+            } else if (hbc > hbi) {
+                var excessTransfusion = (hbc - hbi) * ebv;
+                ebl = (hbr * vprbc - excessTransfusion) / hbc;
+                ebl = Math.max(0, ebl); // Ensure EBL is non-negative
+            } else {
+                ebl = 0;
+            }
+
+            // Step 4: Calculate MABL
+            var hbav = (hbi + hbt) / 2; // Average of initial and transfusion trigger hemoglobin
+            var mabl = (ebv * (hbi - hbt)) / hbav;
+
+            // Step 5: Calculate EBL as percentage of EBV and MABL
+            var eblPercentageEBV = (ebl / ebv) * 100;
+            var eblPercentageMABL = (ebl / mabl) * 100;
+
+            // Step 6: Display the EBV, EBL, MABL results and percentages
+            document.getElementById("result").innerHTML = `
+                <strong style="color: red;">Estimated Blood Volume (EBV): ${Math.round(ebv)} mL</strong><br>
+                <strong style="color: darkred;">Estimated Blood Loss (EBL): ${Math.round(ebl)} mL (${Math.round(eblPercentageEBV)}% of EBV, ${Math.round(eblPercentageMABL)}% of MABL)</strong><br>
+                <strong style="color: orange;">Maximum Allowable Blood Loss (MABL): ${Math.round(mabl)} mL</strong>
+            `;
+
+            // Step 7: Generate the bar graph comparison of EBL and MABL
+            var ctx = document.getElementById('bloodLossChart').getContext('2d');
+
+            if (chart) {
+                chart.destroy(); // Destroy previous chart instance to prevent overlap
+            }
+
+            chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['EBL', 'MABL'],
+                    datasets: [{
+                        data: [Math.round(ebl), Math.round(mabl)],
+                        backgroundColor: ['darkred', 'orange'],
+                        borderColor: ['darkred', 'orange'],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Blood Loss (mL)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+
+        function resetForm() {
+            document.getElementById("eblMablForm").reset();
+            document.getElementById("result").innerHTML = "";
+            if (chart) {
+                chart.destroy();
+            }
+        }
+    </script>
+</head>
+<body>
+    <h2>Estimated Blood Loss (EBL) & MABL Calculator v 1.5, 24Sep2024, Author: Prof J Kirtania</h2>
+
+    <form id="eblMablForm">
+        <label for="gender">Gender:</label>
+        <select id="gender" name="gender">
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+        </select><br><br>
+
+        <label for="height">Height (cm):</label>
+        <input type="number" id="height" name="height" step="any"><br><br>
+
+        <label for="weight">Weight (kg):</label>
+        <input type="number" id="weight" name="weight" step="any"><br><br>
+
+        <label for="ageCategory">Age Category:</label>
+        <select id="ageCategory" name="ageCategory">
+            <option value="adult">Adult</option>
+            <option value="infant">Infant</option>
+            <option value="neonate">Neonate</option>
+            <option value="preterm">Preterm Neonate</option>
+        </select><br><br>
+
+        <label for="hbi">Initial Hemoglobin (Hbi) (g/dL):</label>
+        <input type="number" id="hbi" name="hbi" step="any"><br><br>
+
+        <label for="hbc">Current Hemoglobin (Hbc) (g/dL):</label>
+        <input type="number" id="hbc" name="hbc" step="any"><br><br>
+
+        <label for="hbt">Transfusion Trigger Hemoglobin (Hbt) (g/dL) (Default = 8):</label>
+        <input type="number" id="hbt" name="hbt" step="any" placeholder="Optional"><br><br>
+
+        <label for="hbr">PRBC Hemoglobin Concentration (Hbr) (g/dL) (Default = 20):</label>
+        <input type="number" id="hbr" name="hbr" step="any" placeholder="Optional"><br><br>
+
+        <label for="vprbc">Volume of PRBC Transfused (mL) (Default = 0):</label>
+        <input type="number" id="vprbc" name="vprbc" step="any" placeholder="Optional"><br><br>
+
+        <button type="button" class="calculate-btn" onclick="calculateEBLAndMABL()">Calculate EBL & MABL</button>
+        <button type="button" onclick="resetForm()">Reset</button>
+    </form>
+
+    <p id="result"></p>
+
+    <canvas id="bloodLossChart" width="400" height="200"></canvas>
+	
+	
+	<br> Note:<br>
+	<br> This algorithm assumes that the patient's intravascular volume is near normal by fluid therapy, inspite of blood loss. <br>
+	<br> Initial Hemoglobin (Hbi) and Current Hemoglobin (Hbc) should preferably be measured by the same method, i.e. both by ABG sample, or both by HemoCue, or both by CBC at Lab. <br>
+	<br> The EBL estimate is based on the principle of hemoglobin mass loss estimation.<br>
+	<br> References:<br> 
+    <br> 1) Nadler SB, Hidalgo JH, Bloch T. Prediction of blood volume in normal human adults. Surgery. 1962 Feb;51(2):224-32. <br> 
+    <br> 2) Gross JB. Estimating allowable blood loss: corrected for dilution. Anesthesiology. 1983 Mar;58(3):277-80. <br>
+</body>
+</html>
